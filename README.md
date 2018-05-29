@@ -37,6 +37,8 @@ For documentation and details see http://dpdk.org/doc/guides/linux_gsg/index.htm
 ```
 **NOTE:** if you are running on a i686 machine, please use `i686-native-linuxapp-gcc` as `RTE_TARGET`
 
+**UPDATE** DPDK version use dpdk-stable-16.11.3.tar.gz
+
 ### 3.2 Install DPDK-Replay
 Get it from the git repository. Remind to set `RTE_SDK` and `RTE_TARGET`.
 ```bash

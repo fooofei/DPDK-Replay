@@ -63,6 +63,8 @@ int main(int argc, char **argv)
 	/* Create handler for SIGINT for CTRL + C closing and SIGALRM to print stats*/
 	signal(SIGINT, sig_handler);
 	signal(SIGALRM, alarm_routine);
+    printf("wait for debugger attach \n"); fflush(stdout);
+    getchar();
 
 	/* Initialize DPDK enviroment with args, then shift argc and argv to get application parameters */
 	ret = rte_eal_init(argc, argv);
@@ -72,10 +74,10 @@ int main(int argc, char **argv)
 
 	/* Check if this application can use 1 core*/
 	ret = rte_lcore_count ();
-	if (ret != 2) FATAL_ERROR("This application needs exactly 2 cores.");
+	if (ret < 2) FATAL_ERROR("This application needs exactly 2 cores.");
 
 	/* Parse arguments */
-	parse_args(argc, argv);
+	ret = parse_args(argc, argv);
 	if (ret < 0) FATAL_ERROR("Wrong arguments\n");
 
 	/* Probe PCI bus for ethernet devices, mandatory only in DPDK < 1.8.0 */
@@ -90,7 +92,7 @@ int main(int argc, char **argv)
 	
 	/* Create a mempool with per-core cache, initializing every element for be used as mbuf, and allocating on the current NUMA node */
 	pktmbuf_pool = rte_mempool_create(MEMPOOL_NAME, buffer_size-1, MEMPOOL_ELEM_SZ, MEMPOOL_CACHE_SZ, sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL, rte_pktmbuf_init, NULL,rte_socket_id(), 0);
-	if (pktmbuf_pool == NULL) FATAL_ERROR("Cannot create cluster_mem_pool. Errno: %d [ENOMEM: %d, ENOSPC: %d, E_RTE_NO_TAILQ: %d, E_RTE_NO_CONFIG: %d, E_RTE_SECONDARY: %d, EINVAL: %d, EEXIST: %d]\n", rte_errno, ENOMEM, ENOSPC, E_RTE_NO_TAILQ, E_RTE_NO_CONFIG, E_RTE_SECONDARY, EINVAL, EEXIST  );
+	if (pktmbuf_pool == NULL) FATAL_ERROR("Cannot create cluster_mem_pool. Errno: %d [ENOMEM: %d, ENOSPC: %d, E_RTE_NO_CONFIG: %d, E_RTE_SECONDARY: %d, EINVAL: %d, EEXIST: %d]\n", rte_errno, ENOMEM, ENOSPC, E_RTE_NO_CONFIG, E_RTE_SECONDARY, EINVAL, EEXIST  );
 	
 	/* Create a ring for exchanging packets between cores, and allocating on the current NUMA node */
 	intermediate_ring = rte_ring_create 	(RING_NAME, buffer_size, rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ );
@@ -371,11 +373,12 @@ static void init_port(int i) {
 		struct rte_eth_link link;
 		struct rte_eth_dev_info dev_info;
 		struct rte_eth_rss_conf rss_conf;
-		struct rte_eth_fdir fdir_conf;
+		struct rte_eth_fdir_info fdir_conf; // or rte_eth_fdir_filter
 
 		/* Retreiving and printing device infos */
 		rte_eth_dev_info_get(i, &dev_info);
-		printf("Name:%s\n\tDriver name: %s\n\tMax rx queues: %d\n\tMax tx queues: %d\n", dev_info.pci_dev->driver->name,dev_info.driver_name, dev_info.max_rx_queues, dev_info.max_tx_queues);
+		//  dev_info.pci_dev->driver->name
+		printf("Name:%s\n\tDriver name: %s\n\tMax rx queues: %d\n\tMax tx queues: %d\n","No name",dev_info.driver_name, dev_info.max_rx_queues, dev_info.max_tx_queues);
 		printf("\tPCI Adress: %04d:%02d:%02x:%01d\n", dev_info.pci_dev->addr.domain, dev_info.pci_dev->addr.bus, dev_info.pci_dev->addr.devid, dev_info.pci_dev->addr.function);
 
 		/* Configure device with '1' rx queues and 1 tx queue */
@@ -413,7 +416,7 @@ static void init_port(int i) {
 		if (ret == 0) printf("\tDevice supports RSS\n"); else printf("\tDevice DOES NOT support RSS\n");
 		
 		/* Print Flow director support */
-		ret = rte_eth_dev_fdir_get_infos (i, &fdir_conf);
+		ret = rte_eth_dev_filter_ctrl(i, RTE_ETH_FILTER_FDIR, RTE_ETH_FILTER_GET, &fdir_conf);
 		if (ret == 0) printf("\tDevice supports Flow Director\n"); else printf("\tDevice DOES NOT support Flow Director\n"); 
 
 	

@@ -110,7 +110,7 @@ static const struct rte_eth_conf port_conf = {
 		.rss_conf = {
 			.rss_key = rss_seed,				/* Set the seed,					*/
 			.rss_key_len = 40,				/* and the seed length.					*/
-			.rss_hf = (ETH_RSS_IPV4_TCP | ETH_RSS_UDP) ,	/* Set the mask of protocols RSS will be applied to 	*/
+			.rss_hf = ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP ,	/* Set the mask of protocols RSS will be applied to 	*/
 		}	
 	}
 };
