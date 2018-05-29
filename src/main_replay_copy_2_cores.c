@@ -33,7 +33,8 @@ char * file_name = NULL;
 pcap_t *pt;
 int times = 1;
 int64_t time_out = 0;
-uint64_t buffer_size = 1048576;
+//uint64_t buffer_size = 1048576; //1024*1024
+uint64_t buffer_size = 32768; // 32*1024
 uint64_t max_pkt = 0;
 uint64_t max=0, avg=0, nb=0;
 int do_shutdown = 0;
@@ -54,6 +55,8 @@ struct timeval last_time;
 
 static int main_loop_consumer(__attribute__((unused)) void * arg);
 
+
+// args $ /data/sbin/dpdk-replay  --proc-type=auto -l 18-19 -- -f /data/sbin/wget_packet2_gamecc.pcap
 /* Main function */
 int main(int argc, char **argv)
 {
@@ -90,6 +93,8 @@ int main(int argc, char **argv)
 	nb_sys_ports = rte_eth_dev_count();
 	if (nb_sys_ports <= 0) FATAL_ERROR("Cannot find ETH devices\n");
 	
+    // 在这个地方与其他进程耦合度大 PRIMARY 进程启动后  此进程为 SECONDARY 进程  mempool 信息被记录到 PRIMARY 进程中
+    // 如果此进程结束掉 PRIMARY 还在运行， 到 mempool 这里就会创建失败 因为 mempool 存在
 	/* Create a mempool with per-core cache, initializing every element for be used as mbuf, and allocating on the current NUMA node */
 	pktmbuf_pool = rte_mempool_create(MEMPOOL_NAME, buffer_size-1, MEMPOOL_ELEM_SZ, MEMPOOL_CACHE_SZ, sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL, rte_pktmbuf_init, NULL,rte_socket_id(), 0);
 	if (pktmbuf_pool == NULL) FATAL_ERROR("Cannot create cluster_mem_pool. Errno: %d [ENOMEM: %d, ENOSPC: %d, E_RTE_NO_CONFIG: %d, E_RTE_SECONDARY: %d, EINVAL: %d, EEXIST: %d]\n", rte_errno, ENOMEM, ENOSPC, E_RTE_NO_CONFIG, E_RTE_SECONDARY, EINVAL, EEXIST  );
@@ -385,13 +390,14 @@ static void init_port(int i) {
 		ret = rte_eth_dev_configure(i, 1, 1, &port_conf);
 		if (ret < 0) rte_panic("Error configuring the port\n");
 
+        // 这是一个发送报文的程序 一定要使用 rx queue 这个 API 吗
 		/* For each RX queue in each NIC */
 		/* Configure rx queue j of current device on current NUMA socket. It takes elements from the mempool */
 		ret = rte_eth_rx_queue_setup(i, 0, RX_QUEUE_SZ, rte_socket_id(), &rx_conf, pktmbuf_pool);
-		if (ret < 0) FATAL_ERROR("Error configuring receiving queue\n");
+		//if (ret < 0) FATAL_ERROR("Error configuring receiving queue\n");
 		/* Configure mapping [queue] -> [element in stats array] */
-		ret = rte_eth_dev_set_rx_queue_stats_mapping 	(i, 0, 0);
-		if (ret < 0) FATAL_ERROR("Error configuring receiving queue stats\n");
+		//ret = rte_eth_dev_set_rx_queue_stats_mapping 	(i, 0, 0);
+		//if (ret < 0) FATAL_ERROR("Error configuring receiving queue stats\n");
 
 
 		/* Configure tx queue of current device on current NUMA socket. Mandatory configuration even if you want only rx packet */

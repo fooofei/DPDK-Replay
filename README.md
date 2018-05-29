@@ -37,7 +37,7 @@ For documentation and details see http://dpdk.org/doc/guides/linux_gsg/index.htm
 ```
 **NOTE:** if you are running on a i686 machine, please use `i686-native-linuxapp-gcc` as `RTE_TARGET`
 
-**UPDATE** DPDK version use dpdk-stable-16.11.3.tar.gz
+**UPDATE:** DPDK version use dpdk-stable-16.11.3.tar.gz
 
 ### 3.2 Install DPDK-Replay
 Get it from the git repository. Remind to set `RTE_SDK` and `RTE_TARGET`.
@@ -131,4 +131,82 @@ Here some example of command lines:
 The system approximately each one seconds prints statistics about its performances.
 ```
 Rate:   10.000Gbps     1.319Mpps [Average rate:    10.000Gbps     1.319Mpps], Buffer:   89.998% Packets read speed:    0.333us
+```
+
+
+
+
+## 心得
+
+使用这个 DPDK replay 放到自己的代码里，效果不好。
+
+不好在 1 自己的程序也使用了 DPDK, 如果再增加这个 DPDK replay 的程序，就有两个进程在使用 mempool 这一套东西 耦合度大 
+
+不好在 2 如果自己的进程使用了 1 个网口作为接收方， DPDK replay 发包到这个网口，自己的进程并没有接收到包 问题还未知
+
+推荐的做法是：
+
+如果是测试 DPDK 接收包的部分代码应该考虑1个以上网口，或者多个 x86，如果是测试 DPDK 接包之后的处理，
+
+应该使用 pcap API 把 pcap 文件作为输入，生成 mbuf 灌到后续处理流程，比如可以灌到 rte_ring 上。
+
+从 pcap 文件转到 mbuf 代码见 `main_loop_producer`
+
+
+对灌包有个监控，知道灌多少 pps
+
+```
+struct tick_s
+{
+    struct timeval now;
+    struct timeval start_time;
+    struct timeval last_time;
+    uint64_t send_count_total;
+    uint32_t send_count_last;
+};
+
+void tick_init(struct tick_s * self)
+{
+    memset(self, 0, sizeof(*self));
+    gettimeofday(&self->start_time, NULL);
+    gettimeofday(&self->last_time, NULL);
+}
+static inline double timeval_delta_millsec(const struct timeval * end, const struct timeval * begin)
+{
+    return (double)(end->tv_sec - begin->tv_sec) * 1000 + (double)(end->tv_usec - begin->tv_usec) / 1000;
+}
+
+void tick_now(struct tick_s * self, uint16_t send_count)
+{
+    self->send_count_last += send_count;
+    self->send_count_total += send_count;
+    double delta;
+    uint64_t pps1;
+    uint64_t pps2;
+    uint32_t value;
+
+    // 报文累计到一个小数字后再看看时间
+    if (self->send_count_last > 1000)
+    {
+        gettimeofday(&self->now, NULL);
+        delta = timeval_delta_millsec(&self->now, &self->last_time);
+        if (delta > 3000)
+        {
+            char buf[0x200];
+            struct string_buf_s sb;
+
+            string_buf_set(&sb, buf, 0x200);
+
+            value = (uint32_t)(delta / 1000);
+            pps1 = self->send_count_last / value;
+            string_buf_sprintf(&sb, "%lu/%u=%lu ", self->send_count_last, value, pps1);
+            value = (uint32_t)(timeval_delta_millsec(&self->now, &self->start_time)/1000);
+            pps2 = self->send_count_total / value;
+            string_buf_sprintf(&sb, "total %lu/%u=%lu\n", self->send_count_total, value, pps2);
+            fprintf(stdout, buf); fflush(stdout);
+            self->last_time = self->now;
+            self->send_count_last = 0;
+        }
+    }
+}
 ```
